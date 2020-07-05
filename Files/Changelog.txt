@@ -1,0 +1,177 @@
+V9.90
+
+Minor Changes
+Bug Fixes
+
+V9.86
+
+Fix Bot Messages 
+
+V9.85
+
+Sold Notification fix
+
+V9.8
+
+Discord notifications added
+Sold items notification
+Optimizations
+
+V9.5
+
+Discord Alerts!
+Bug Fixes 
+Optimizations
+
+V9.4.8
+
+More Optimizations
+Bug Fixes
+
+V9.4.7
+
+Optimizations
+
+V9.4.6
+
+Timer, Short Medians, Long Median are now changeable (Settings.txt)
+Minor Fixes
+
+V9.4.5
+
+Multi Properties added
+Refine Not Found info added
+Searching Total added 
+Some words renamed
+Bug Fixes
+
+V9.4.2
+
+Bug fixes
+
+V9.4.1 
+
+Bug fixes
+
+V9.4
+
+Long Median added (90 days)
+Long Median% added
+EA modified
+Cheap added 
+Alert% removed
+Ram usage reduced
+Lot of bug fixes
+
+V9.3
+
+Property fixed
+ID.txt formatting changed 
+Warning suppressed
+Bug Fixes
+
+V9.2
+
+Table words shortened
+Medians cached for 7 days  
+Added "EA" 
+Code Cleanup
+Bug Fixes
+
+V9.1
+
+All '.txt' are now inside 'Files' folder 
+'ID-PRICE-REFINE' renamed to 'ID'
+Table Reorganized
+Table Sorted by M%
+Medians are cached for 5 days   
+Medians are now calculated based on 1 month  
+Optimizations and Bug Fixes
+
+V9.0
+
+All code rewritten 
+Bug Fixes
+Property added 
+
+V8.1
+
+Extra fix for Chrome
+Refresh number added
+Little Speed Up
+
+V8.0
+
+Chrome support returned
+Big Speed Up
+
+V7.1
+
+Fixed Open/Close
+Chrome support dropped
+Refresh text 10sec interval
+
+V7.0
+
+LogIn with Chrome/Firefox cookie
+Location turns green when notified
+
+V6.9.2
+
+Icons added
+Fixed 'Price Now' Property Items not showing
+Renamed program to NovaPriceNotifier
+
+V6.9.1
+
+Missing txt files added again =)
+
+V6.9
+
+More bug fixes (Sorry!)
+Code optimization
+Refreshes now 4min
+
+V6.5
+
+Fix median 0 bug
+Added the possibility for comments in ID-PRICE-REFINE.txt (Easier to identify each ID)
+Added A% column 
+First run optimization
+Table colums reorganized   
+
+V6.1
+
+Fixed 0% being RED instead of Green 
+Reduced refreshes from 5min to 3min  
+
+V6.0
+
+NovaRO website 'Week' and 'Month' deleted (Not reliable)
+Median Price added (Specific to your refine rate)
+Smart Refine Rate added (Will display your refine rate or an above refine if yours doesn't exist or more expensive)
+Code optimization
+
+V5.0
+
+Windows Notification 'fixed' (Now permanent!) 
+Minor colors adjustments
+
+v4.0
+
+Windows Notification added (5 minutes)
+Price Alert added
+Colors adjustments
+
+v2.8
+
+Changed from PrettyTable to Tabulate (Better visibility)
+Changed "Where" header to "Location" 
+Reorganized colums   
+
+v2.6.1 - (12/12/2019)
+
+Fixed '+' signal not showing
+Fixed '+100%' if Week Price/Month Price was 0z
+Reorganized colums
+	 
