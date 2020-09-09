@@ -1,11 +1,35 @@
+V9.96 
+
+Minor fixes
+
+V9.95
+
+Fixed Discord Notification Bug
+
+V9.93
+
+Fixed items with multiple equal properties 
+
+V9.92
+
+Fixed Sold Notification
+
+V9.91
+
+Minor Bug Fixes
+
 V9.90
 
 Minor Changes
 Bug Fixes
 
+V9.87
+
+Bug Fix 
+
 V9.86
 
-Fix Bot Messages 
+Bot Messages fix
 
 V9.85
 
