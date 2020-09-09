@@ -750,7 +750,6 @@ async def on_message(message):
             if message.content == 'y':
                 msg = await discord_user.history(limit=1).flatten()
                 if msg[0].content != discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)':
-                    discord_channel = client.get_channel(716582786953117729) 
                     confirm = 0
                     await discord_user.send('Confirmed!')
                     create_task(Main())
