@@ -1,0 +1,6 @@
+Refresh Time Interval = 180
+Minimum Sell Notification Price = 0
+Short Median Days = 15
+Long Median Days = 60
+Median Cache Days = 365
+Discord ID = 
