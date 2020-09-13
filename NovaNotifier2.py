@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import median
 from os import system
 from sys import exit
-from browsercookie3 import chrome
+from browsercookie3 import chrome, firefox
 from tabulate import tabulate
 from colorama import init, Fore
 from win10toast_persist import ToastNotifier
@@ -33,15 +33,18 @@ async def Login():
     profile = 'Default'
     for i in range(10):
         try:
-            cj = chrome(domain_name='novaragnarok.com', profile=profile)
-            if cj:
-                cjs.append(cj)
+            cjs.append(chrome(domain_name='novaragnarok.com', profile=profile))
         except:
             pass
         profile = 'Profile ' + str(i)
 
+    try:
+        cjs.append(firefox(domain_name='novaragnarok.com'))
+    except:
+        pass
+
     if not cjs:
-        await Read_error(Fore.LIGHTRED_EX + "Chrome Cookies Not Found!")
+        await Read_error(Fore.LIGHTRED_EX + "Chrome/Firefox Cookies Not Found!")
 
     for each in cjs:
         cookies.append({"fluxSessionData": each._cookies['www.novaragnarok.com']['/']['fluxSessionData'].value})
@@ -74,24 +77,26 @@ async def Login():
 
 async def Read_info():
     # Read Settings
-    remove, median_interval, median_filter = 1, 15, 0
+    median_interval, median_filter = 365, 0
     try:
         async with aiofiles.open('Files/Settings.txt', 'r') as f:
             async for line in f:
-                if 'Median Cache Interval' in line:
+                if 'Median Cache Days' in line:
                     median_interval = int(line.replace(' ', '').strip('\n').split('=')[1])
                 if 'Median Filter' in line:
                     median_filter = int(line.replace(' ', '').replace('.', '').strip('\n').split('=')[1])
-                if 'Median Cache Date' in line:
-                    line = line.replace(' ', '').strip('\n').split('=')[1]
-                    remove = await Date(line, median_interval, 1)
     except:
         await Read_error('Settings Error!')
 
     # Get file data and remove Medians_cache if old
-    if not remove:
-        today = datetime.utcnow() - timedelta(hours=7)
-        today = today.replace(tzinfo=timezone.utc)
+    try:
+        with open('Files/Medians_refresh.txt', 'r') as f:
+            date = (f.read()).strip()
+    except:
+        await Read_error('Medians Refresh File Error!')
+
+    if not await Date(date, median_interval, 1):
+        today = datetime.utcnow()
         async with aiofiles.open('Files/Medians_refresh.txt', 'w+') as f:
             await f.write(str(today.day) + '-' + str(today.month) + '-' + str(today.year))
         async with aiofiles.open('Files/Medians_cache.txt', 'w+'):
@@ -657,14 +662,17 @@ async def Main():
     run, t.inputs, t.refresh, t.timer = 0, 0, 0, 0
    
     #Read Files
-    
+    timer_interval = 180
+    sell_price = 0
     async with aiofiles.open('Files/Settings.txt', 'r') as f:
         async for line in f:
-            if 'Refresh Time Interval' in line:
-                timer_interval = int(line.replace(' ', '').strip('\n').split('=')[1])
+            try:
+                if 'Refresh Time Interval' in line:
+                    timer_interval = int(line.replace(' ', '').strip('\n').split('=')[1])
+                    break
+            except:
                 break
-            else:
-                timer_interval = 180
+
     async with aiofiles.open('Files/Settings.txt', 'r') as f:
         async for line in f:
             try:
@@ -672,9 +680,8 @@ async def Main():
                     sell_price = int(line.replace(' ', '').replace('.', '').strip('\n').split('=')[1])
                     break
             except:
-                sell_price = 0
                 break
-   
+    
     cookies = await Login()
     items = await Read_info()
 
