@@ -28,7 +28,7 @@ class item:
 
 async def Login():
     print(Fore.LIGHTGREEN_EX + "Login in Progress...")
-    cjs, cookies, usernames = [], [], []
+    cjs, cookies, valid_cookies, usernames = [], [], [], []
 
     profile = 'Default'
     for i in range(10):
@@ -47,7 +47,10 @@ async def Login():
         await Read_error(Fore.LIGHTRED_EX + "Chrome/Firefox Cookies Not Found!")
 
     for each in cjs:
-        cookies.append({"fluxSessionData": each._cookies['www.novaragnarok.com']['/']['fluxSessionData'].value})
+        try:
+            cookies.append({"fluxSessionData": each._cookies['www.novaragnarok.com']['/']['fluxSessionData'].value})
+        except KeyError:
+            pass
 
     logins = await gather(*(Network_session(['https://novaragnarok.com'], cookie) for cookie in cookies))
 
@@ -56,23 +59,21 @@ async def Login():
     else:
         print(Fore.LIGHTRED_EX + "Discord NOT Connected!")
 
-    i = 0
-    while i < len(cookies):
+    for i, item in enumerate(logins):
         try:
-            username = logins[i][0].split("</strong>", 1)[0].rsplit(">", 1)[1]
+            username = item[0].split("</strong>", 1)[0].rsplit(">", 1)[1]
             if '\\n' not in username and username not in usernames:
                 print(username + Fore.LIGHTGREEN_EX + " Online!")
                 usernames.append(username)
-                i += 1
-            else:
-                del cookies[i]
+                valid_cookies.append(cookies[i])
         except:
-            del cookies[i]
-    if not i:
+            pass
+
+    if not valid_cookies:
         await Read_error('No Account Found!')
 
     await async_sleep(2)
-    return cookies
+    return valid_cookies
 
 
 async def Read_info():
@@ -209,7 +210,7 @@ async def Network_session(search, cookie, count=None):
 async def Network_get(url, session, count=None):
     retry = 0
     if url:  # Skip history search if already has med
-        while True and retry < 3:
+        while True and retry < 5:
             try:
                 async with session.get(url, timeout=5) as response:
                     if response.status == 200:
@@ -334,16 +335,15 @@ async def Median(history, refine, settings):
 
 
 async def Date(date, interval, *args, check=None):
-    today = datetime.utcnow() - timedelta(hours=7)
-    today = today.replace(tzinfo=timezone.utc)
-
     if not args:
+        today = datetime.utcnow().replace(tzinfo=timezone.utc) - timedelta(hours=7)
         date = date[1] + '-' + date[0] + '-' + '20' + date[2]
         date = datetime.strptime(date, "%d-%m-%Y")
-        time = today - timedelta(days=date.day)
+        time = today.day - date.day
     elif 1 in args:
+        today = datetime.utcnow()
         date = datetime.strptime(date, "%d-%m-%Y")
-        time = today - timedelta(days=date.day)
+        time = today.day - date.day
     elif 3 in args:
         date1 = date.replace(' ', '').split('-')[0].split('/')
         date2 = date.replace(' ', '').split('-')[1].split(':')
@@ -357,7 +357,7 @@ async def Date(date, interval, *args, check=None):
         else:
             return 0  # old
 
-    if time.day < interval:
+    if time <= interval:
         return 1
     else:
         return 0
