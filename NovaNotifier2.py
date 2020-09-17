@@ -1,5 +1,5 @@
-from asyncio import gather, run, sleep as async_sleep, set_event_loop_policy, \
-    WindowsSelectorEventLoopPolicy, new_event_loop, create_task, run_coroutine_threadsafe
+from asyncio import gather, run, sleep as async_sleep, new_event_loop, \
+    create_task, run_coroutine_threadsafe
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from os import system
@@ -700,7 +700,6 @@ async def Main():
         await Timer(t)
 
 init(autoreset=True)
-#set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 discord_user = discord_channel = discord_bot = confirm = 0
 discord_loop = new_event_loop()
 client = discord.Client(loop=discord_loop)
