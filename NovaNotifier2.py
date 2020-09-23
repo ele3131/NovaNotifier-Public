@@ -10,6 +10,8 @@ from colorama import init, Fore
 from win10toast_persist import ToastNotifier
 from aiohttp import ClientSession, TCPConnector
 from aioconsole import ainput
+from secrets import token_hex
+from traceback import format_exc
 import discord
 import aiofiles
 
@@ -54,16 +56,10 @@ async def Login():
 
     logins = await gather(*(Network_session(['https://novaragnarok.com'], cookie) for cookie in cookies))
 
-    if discord_channel:
-        print(Fore.LIGHTGREEN_EX + "Discord Connected!")
-    else:
-        print(Fore.LIGHTRED_EX + "Discord NOT Connected!")
-
     for i, item in enumerate(logins):
         try:
             username = item[0].split("</strong>", 1)[0].rsplit(">", 1)[1]
             if '\\n' not in username and username not in usernames:
-                print(username + Fore.LIGHTGREEN_EX + " Online!")
                 usernames.append(username)
                 valid_cookies.append(cookies[i])
         except:
@@ -72,8 +68,8 @@ async def Login():
     if not valid_cookies:
         await Read_error('No Account Found!')
 
-    await async_sleep(2)
-    return valid_cookies
+    print('\x1b[2K' + 'Login: ' + Fore.LIGHTGREEN_EX + 'Finished')
+    return usernames, valid_cookies
 
 
 async def Read_info():
@@ -163,11 +159,13 @@ async def Read_info():
 
 async def Network(items, cookie, run):
     info, history, htmls = [], [], []
-    count = {'each': 1, 'total': len(items)}
+    count = {'each': 1, 'total': 0}
 
     # Search for Available Now Market Info
     for each in items:
         info.append(each.info_url)
+        if not each.history_url:
+            count['total'] += 1
 
     htmls = await Network_session(info, cookie, count)
 
@@ -336,7 +334,7 @@ async def Median(history, refine, settings):
 
 async def Date(date, interval, *args, check=None):
     if not args:
-        today = datetime.utcnow().replace(tzinfo=timezone.utc) - timedelta(hours=7)
+        today = datetime.utcnow() - timedelta(hours=7)
         date = date[1] + '-' + date[0] + '-' + '20' + date[2]
         date = datetime.strptime(date, "%d-%m-%Y")
         time = today.day - date.day
@@ -469,22 +467,25 @@ async def Lowest_price(find_price_refine, find_price_refine_next, med, i, info):
 async def Property_exists(prop_column, item, find_price_refine):
     # No Property Column
     if prop_column == -1:
-        if 'None' not in item.prop:
-            return 0
+        if 'None' or 'Any' in item.prop:
+            return 1
 
     # Property Column
     else:
-        d = {}
-        for each in item.prop:
-            if each not in d.keys():  # It is not a duplicate property
-                i = find_price_refine.split('span class', 1)[0].find(each)
+        pos = {}
+        for prop in item.prop:
+            if prop.lower() == 'any':
+                return 1
+
+            elif prop not in pos.keys():  # Not a duplicate property
+                i = find_price_refine.split('span class', 1)[0].find(prop)
                 if i != -1:
-                    d[each] = i
+                    pos[prop] = i  # Save last property position
                 else:
                     return 0
 
             else:  # Duplicate property, search after last one
-                i = find_price_refine.split('span class', 1)[0][d[each] + 1: -1].find(each)
+                i = find_price_refine.split('span class', 1)[0][pos[prop] + 1: -1].find(prop)
                 if i != -1:
                     pass
                 else:
@@ -517,8 +518,7 @@ async def Place(item, pos):
 
 
 async def Sold_notification(cookies, sell_price):
-    now = datetime.utcnow() - timedelta(hours=7)
-    now = now.replace(second=0, microsecond=0, tzinfo=timezone.utc)
+    now = datetime.utcnow().replace(second=0, microsecond=0) - timedelta(hours=7)
     j, k, htmls = [0] * len(cookies), [0] * len(cookies), []
 
     while True:
@@ -545,7 +545,7 @@ async def Sold_notification(cookies, sell_price):
                     k[profile] += 1
                     if int(price.replace(',', '')) >= (sell_price * 0.97):
                         await Windows_toast(name, prop, price, ea=ea)
-                        if discord_channel:
+                        if confirm:
                             run_coroutine_threadsafe(Discord_toast(name, prop, price, ea=ea), discord_loop)
                     if j[profile] == k[profile]:
                         found = 0
@@ -572,12 +572,12 @@ async def Cheap_notification(items, notify):
                 if each.refine not in notify[each.ID]:
                     await Windows_toast(each.name, each.prop, each.price, each.refine, each.place)
                     notify[each.ID] = [each.refine]
-                    if discord_channel:
+                    if confirm:
                         run_coroutine_threadsafe(Discord_toast(each.name, each.refine, each.prop, each.price, each.place, each.info_url), discord_loop)
             except:
                 await Windows_toast(each.name, each.prop, each.price, each.refine, each.place)
                 notify[each.ID] = [each.refine]
-                if discord_channel:
+                if confirm:
                     run_coroutine_threadsafe(Discord_toast(each.name, each.prop, each.price, each.refine, each.place, each.info_url), discord_loop)
 
             each.format_id = Fore.LIGHTGREEN_EX + each.ID  # ID green if notified
@@ -598,25 +598,24 @@ async def Windows_toast(name, prop, price, refine=None, place=None, ea=None):
 
 async def Discord_toast(name, prop, price, refine=None, place=None, url=None, ea=None):
     if not ea:
-        msg = "Price Reached!\nItem: " + "+" + str(refine) + ' ' + name + '\nProp: ' + ', '.join(prop) + \
-              '\nLocation: ' + place + '\nPrice: ' + format(price, ',d') + 'z' + '\n' + url
+        msg = "Price Reached!\nItem: +" + str(refine) + ' ' + name + '\nProp: ' + ', '.join(prop) + \
+              '\nLocation: ' + place + '\nPrice: ' + format(price, ',d') + 'z\n' + url
     else:  # Sold
         msg = ea + 'x ' + name + '\nProp: ' + prop + '\nSold for: ' + price + 'z'
 
     await discord_user.send(msg)
-    # await discord_channel.send(discord_user.name + '#' + discord_user.discriminator + '\n' + msg)
 
 
-async def MakeTable(items):
-    table, t = [], ['ID', 'NAME', 'EA', 'CHEAP', 'REF', 'PROP', 'PRICE', 'SHORT MED', 'LONG MED', 'SM%', 'LM%', 'ALERT', 'LOCATION']
+async def MakeTable(items, usernames):
+    table, t = [], ['ID', 'NAME', 'REFINE', 'PROP', 'EA', 'CHEAP', 'PRICE', 'SHORT MED', 'LONG MED', 'SM%', 'LM%', 'ALERT', 'LOCATION']
 
     for each in items:
         table.append([Fore.LIGHTWHITE_EX + each.format_id,
                      Fore.LIGHTCYAN_EX + each.format_name,
-                     Fore.LIGHTWHITE_EX + each.ea,
-                     Fore.LIGHTWHITE_EX + each.cheap,
                      Fore.LIGHTWHITE_EX + each.format_refine,
                      Fore.WHITE + each.format_prop,
+                     Fore.LIGHTWHITE_EX + each.ea,
+                     Fore.LIGHTWHITE_EX + each.cheap,
                      Fore.LIGHTMAGENTA_EX + each.format_price,
                      Fore.LIGHTYELLOW_EX + each.format_med,
                      Fore.LIGHTYELLOW_EX + each.format_long_med,
@@ -627,156 +626,165 @@ async def MakeTable(items):
 
     table.sort(key=TableSort, reverse=True)
     system('cls')
+
     print(tabulate(table, headers=t, tablefmt='fancy_grid'))
+    print("(Refresh: Enter / Pause: Left Click / Resume: Right Click)")
+
+    if confirm:
+        print(Fore.LIGHTGREEN_EX + '\nDiscord:', user)
+    else:
+        print(Fore.LIGHTRED_EX + '\nDiscord:', 'Offline')
+
+    print(Fore.LIGHTGREEN_EX + '\nAccounts:', str(*usernames), '\n')
 
 
 def TableSort(val):
     return int(val[9].split('m')[1].split('%')[0]), val[12].split('m')[2].split('"\"')
 
 
-async def Timer(t):
-    while(t.timer):
-        print('\x1b[2K' + Fore.LIGHTGREEN_EX + "Next Refresh(" + str(t.refresh+1) + "): " + 
-                str(t.timer) + ' sec' + "\t\t(Force Refresh: Enter / Pause: Left Click / Resume: Right Click)", end='\r')
-        t.timer -= 1
+async def Input():
+    await ainput()
+
+
+async def Timer(timer):
+    input_task = create_task(Input())
+    while(timer):
+        print(f"\x1b[2KRefresh in {Fore.LIGHTYELLOW_EX}{str(timer)}", end='\r')
+        timer -= 1
         await async_sleep(1)
-        if t.timer <= 0:
-            t.refresh += 1
+        if timer <= 0 or input_task._state == "FINISHED":
+            print('\x1b[2K' + Fore.LIGHTGREEN_EX + 'Refreshing...')
             break
 
-async def Input(t):
-    while True:
-        msg = await ainput()
-        if t.timer and '' in msg:
-            t.timer = 0
-            
+
 async def Read_error(msg):
     system('cls')
     print(Fore.LIGHTRED_EX + msg)
     await ainput("\nPress any button to exit")
     exit(0)
 
+
+async def Login_timeout(client):
+    await async_sleep(15)
+    if not confirm:
+        await Read_error("Login Timeout")
+        await client.close()
+
+
 async def Main():
-    notify = {}
-    t = type('Async_variables', (), {})()
-    run, t.inputs, t.refresh, t.timer = 0, 0, 0, 0
-   
-    #Read Files
-    timer_interval = 180
-    sell_price = 0
+    # Read variables from file before start
+    timer_interval, sell_price = 180, 0
     async with aiofiles.open('Files/Settings.txt', 'r') as f:
         async for line in f:
             try:
                 if 'Refresh Time Interval' in line:
                     timer_interval = int(line.replace(' ', '').strip('\n').split('=')[1])
-                    break
-            except:
-                break
-
-    async with aiofiles.open('Files/Settings.txt', 'r') as f:
-        async for line in f:
-            try:
-                if 'Minimum Sell Notification Price' in line:
+                elif 'Minimum Sell Notification Price' in line:
                     sell_price = int(line.replace(' ', '').replace('.', '').strip('\n').split('=')[1])
-                    break
             except:
                 break
-    
-    cookies = await Login()
-    items = await Read_info()
 
-    #Loop
+    # Start
+    notify = {}
+    usernames, cookies = await Login()
+    items = await Read_info()
+    create_task(Sold_notification(cookies, sell_price))
+
+    run = 0
+    await Network(items, cookies[0], run)
+    await History(items)
+    await Sorting(items) 
+    await Cheap_notification(items, notify)
+    await MakeTable(items, usernames)
+    await Timer(timer_interval)
+
+    run = 1
     while True:
-        await Network(items, cookies[0], run)
-        if not run: 
-            await History(items)
-            create_task(Input(t))
-            create_task(Sold_notification(cookies, sell_price))
-            run = 1
+        await Network(items, cookies[0], run)    
         await Sorting(items) 
         await Cheap_notification(items, notify)
-        await MakeTable(items)
-        t.timer = timer_interval
-        await Timer(t)
+        await MakeTable(items, usernames)
+        await Timer(timer_interval)
+
+"ADD TOKEN TO ENABLE YOUR BOT:"
+
+bot_token = ''
+bot_code_channel = 0
+
+"TOKEN EDIT END"
 
 init(autoreset=True)
-discord_user = discord_channel = discord_bot = confirm = 0
+messages = []
+discord_user = user = confirm = 0
 discord_loop = new_event_loop()
 client = discord.Client(loop=discord_loop)
-my_toast = ToastNotifier()
-
-"EDIT THESE LINES TO ENABLE YOUR OWN BOT:"
-
-bot_id = 0
-channel_id = 0
-token = ''
-
-"EDIT LINES END"
 
 @client.event
 async def on_ready():
-    global discord_user, discord_channel, discord_bot
-    async with aiofiles.open('Files/Settings.txt', 'r') as f:
+    global user, password
+    async with aiofiles.open('Files/Discord.txt', 'r') as f:
         async for line in f:
-            if 'Discord ID' in line:
-                username = (line.replace(' ', '').strip('\n').split('=')[1])
-                break
-        
-    try:
-        discord_user = client.get_user(int(username))
-        discord_bot = client.get_user(bot_id)
-    except:
+            if 'Discord_Username' in line:
+                user = (line.replace(' ', '').strip().split('=')[1])
+            elif 'Discord_Passcode' in line:
+                password = (line.replace(' ', '').strip().split('=')[1])
+            
+
+    if not user:
         await client.close()
         return
-    
-    discord_channel = client.get_channel(channel_id)
 
     try:
-        msg = await discord_user.history(limit=1).flatten()
-    except:
-	    print(Fore.LIGHTRED_EX + "Send a DM to NovaNotifier Bot!")
+        auth_msg = 0
+        global code_channel, messages, discord_user, confirm
+        code_channel = client.get_channel(bot_code_channel)
+        async for message in code_channel.history(limit=None):
+            if user in message.content:
+                messages.append(message)
+                if user in message.content and password == message.content.split(': ', 1)[1]:
+                    discord_id = int(message.content.split(':', 1)[0].split(' ', 1)[1])
+                    discord_user = client.get_user(discord_id)
+                    auth_msg = message
+                    confirm = 1
 
-    try:
-        if msg[0].content != discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)':
-            await discord_user.send(discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)')
+        # Delete old passcodes
+        if auth_msg:
+            for item in messages:
+                if item != auth_msg:
+                    await item.delete()
+
+        if confirm:
+            print(f"Discord: {Fore.LIGHTGREEN_EX}{user}")
+            # Run the program
+            create_task(Main())
         else:
-            print(Fore.LIGHTRED_EX + "Reply Last Discord Message!")
-            return
+            print(f"{Fore.LIGHTYELLOW_EX}Please DM {Fore.LIGHTGREEN_EX}start{Fore.LIGHTYELLOW_EX} to NovaNotifier")
+            create_task(Login_timeout(client))
     except:
-        await discord_user.send(discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)')
-        
+        Read_error(format_exc())
+                    
 @client.event
 async def on_message(message):
-    global discord_channel, confirm
-    if message.author.id == discord_bot.id: 
-        if message.content == discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)' and not confirm:
+    global confirm, discord_user
+    if f"{message.author.name}#{message.author.discriminator}" == user and not message.guild:
+        if not confirm and message.content == 'start':
+            discord_user = client.get_user(message.author.id)
+            print(f"Discord: {Fore.LIGHTGREEN_EX}{discord_user.name}#{discord_user.discriminator}")
+            code = token_hex(3)
+            await code_channel.send(f"{discord_user.name}#{discord_user.discriminator} {discord_user.id}: {code}" )
+            msg = (await discord_user.send(f"Discord Activated\nDiscord Passcode: {code}"))
+            await msg.pin()
+            async with aiofiles.open('Files/Discord.txt', 'w+') as f:
+                await f.write(f"Discord_Username = {user}\nDiscord_Passcode = {code}")
             confirm = 1
-    if message.author.id == discord_user.id:
-        if confirm:
-            if message.content == 'y':
-                msg = await discord_user.history(limit=1).flatten()
-                if msg[0].content != discord_user.name + '#' + discord_user.discriminator + '\nConfirm? (y/n)':
-                    confirm = 0
-                    await discord_user.send('Confirmed!')
-                    create_task(Main())
-            else:
-                await discord_user.send('Not Confirmed!')
-                await client.close()
-    
-    if message.content == '!clear':
-        if message.author.id == discord_user.id:
-            await discord_channel.purge(limit=None)
-            async for msg in discord_user.history():
-                if msg.author.id == discord_bot.id:
-                    await msg.delete()
-    if message.content == '!help':
-        if message.author.id == discord_user.id:
-            await discord_user.send('!clear = Delete bot messages')
+            # Run the program
+            create_task(Main())
              
-print(Fore.LIGHTGREEN_EX + "Initializing...")
 try:
-    client.run(token)
+    print(Fore.LIGHTGREEN_EX + "Initializing...")
+    client.run(bot_token)
 except Exception as e:
     print(Fore.LIGHTRED_EX + "Discord Error!", e)
-    
-run(Main()) #No Discord 
+
+# Run Without Discord    
+run(Main()) 
