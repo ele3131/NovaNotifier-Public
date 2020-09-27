@@ -1,6 +1,32 @@
-V9.96 
+V10:
 
-Minor fixes
+Table's design changed
+Many code optimizations
+
+BETA:
+
+Discord ID replaced by Discord Username
+Program can remember Discord  
+Added property 'Any'
+Added more promt messages
+
+V9.99
+
+Minor bug fix
+
+V9.98
+
+Added Firefox back 
+Redone medians auto delete
+Improved ReadMe
+
+V9.97
+
+Reduced False Positives
+
+V9.96
+
+Minor fix
 
 V9.95
 
