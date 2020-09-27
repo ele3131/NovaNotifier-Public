@@ -1,6 +1,6 @@
-Refresh Time Interval = 180
-Minimum Sell Notification Price = 0
-Short Median Days = 15
-Long Median Days = 60
-Median Cache Days = 365
-Discord ID = 
+timer_refresh (seconds) = 180
+sell_filter (zeny) = 0
+SM (days) = 15
+LM (days) = 45
+median_cache (days) = 356
+median_filter (zeny) = 0
