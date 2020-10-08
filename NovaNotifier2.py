@@ -3,9 +3,7 @@ from sys import platform
 from asyncio import run, gather, sleep, create_task, BoundedSemaphore, TimeoutError
 from datetime import datetime, timedelta, timezone
 from statistics import median
-from browsercookie3 import chrome, firefox
 from aiohttp import ClientSession
-import aiofiles
 from colorama import init, Fore
 from traceback import format_exc
 from tabulate import tabulate
@@ -27,6 +25,7 @@ class NovaNotifier():
         self.cookies = []
         self.items = []
         self.result = []
+        self.sema = None
         self.enter_key = 0
         self.discord_user = ''
 
@@ -34,14 +33,12 @@ class NovaNotifier():
         try:
             print(Fore.LIGHTYELLOW_EX + "Initializing...")
 
-            await self.read_discord()
-            await self.read_settings()
-            await self.read_id()
-            await self.read_medians()
+            self.read_discord()
+            self.read_settings()
 
             print(Fore.LIGHTGREEN_EX + 'Discord in Progress...')
 
-            if self.discord_user:
+            if self.discord_user or self.settings['browser'] == 'none':
                 import discord_bot
                 self.discord_bot = discord_bot
                 token = discord_bot.bot_token
@@ -55,22 +52,30 @@ class NovaNotifier():
 
             print(Fore.LIGHTGREEN_EX + 'Login in Progress...')
 
-            self.sema = BoundedSemaphore(4)
-            await self.login()
+            self.sema = BoundedSemaphore(5)
+
+            if self.settings['browser'] == 'none':
+                self.usernames.append('NovaNotifier')
+                self.cookies.append({"fluxSessionData": self.discord_bot.cookie})
+            else:
+                await self.login()
 
             print(Fore.LIGHTGREEN_EX + 'Requesting Items...')
 
+            self.read_id()
+            self.read_medians()
             await self.network_items(self.items, self.cookies[0])
-            await self.medians_history(self.items)
+            self.medians_history(self.items)
             self.format(self.items)
-
             await self.price_notification()
             self.make_table(self.items)
 
-            for cookie, username in zip(self.cookies, self.usernames):
-                create_task(self.sold_notification(cookie))
+            if self.settings['browser'] != 'none':
+                for cookie, username in zip(self.cookies, self.usernames):
+                    create_task(self.sold_notification(cookie, username))
 
             await self.timer()
+
         except:
             system('cls')
             print(Fore.LIGHTRED_EX + format_exc())
@@ -79,6 +84,7 @@ class NovaNotifier():
 
     async def refresh(self):
         await self.network_items(self.items, self.cookies[0])
+        self.medians_history(self.items)
         self.format(self.items)
         self.make_table(self.items)
 
@@ -86,7 +92,7 @@ class NovaNotifier():
         create_task(self.input())
         timer = self.settings['timer_refresh']
         while(timer):
-            print(f"\x1b[2K{Fore.LIGHTYELLOW_EX}Refresh in {str(timer)} seconds", end='\r')
+            print(f"\x1b[2K{Fore.LIGHTYELLOW_EX}Refresh: {str(timer)} seconds", end='\r')
             timer -= 1
             await sleep(1)
             if timer <= 0 or self.enter_key:
@@ -101,6 +107,8 @@ class NovaNotifier():
             self.enter_key = 1
 
     async def login(self):
+        from browsercookie3 import chrome, firefox
+
         cjs = []
         if self.settings['browser'] == 'firefox':
             try:
@@ -118,7 +126,7 @@ class NovaNotifier():
                 profile = f'Profile {i}'
 
         if not cjs:
-            raise IndexError('COOKIES NOT FOUND!')
+            raise IndexError('Cookies Not Found!')
 
         cookie = []
         for item in cjs:
@@ -127,7 +135,8 @@ class NovaNotifier():
             except KeyError:
                 pass
 
-        login = (await gather(*[self.network_session('https://novaragnarok.com', each) for each in cookie]))
+        site = 'https://www.novaragnarok.com/?module=account&action=view'
+        login = (await gather(*[self.network_session(site, each) for each in cookie]))
 
         for i, item in enumerate(login):
             try:
@@ -141,32 +150,33 @@ class NovaNotifier():
         if self.usernames:
             print(f"Accounts: {Fore.LIGHTGREEN_EX}{str(*self.usernames)}")
         else:
-            raise IndexError('COOKIES INVALID!')
+            raise IndexError('Cookies Invalid!')
 
-    async def read_id(self):
+    def read_id(self):
         self.blacklist = set(open('Files/Blacklist.txt'))
-        async with aiofiles.open('Files/ID.txt', 'r') as f:
-            async for line in f:
-                if line.strip():
-                    ID = line.split(';')[0].strip(' ')
+        with open('Files/ID.txt', 'r') as f:
+            for line in f:
+                if line := line.strip():
+                    line = line.split(';')
+                    ID = line[0].strip()
                     if ID + '\n' not in self.blacklist:
                         self.items.append({
                             'id': ID,
                             'market_url': "https://www.novaragnarok.com/?module=vending&action=item&id=" + ID,
                             'history_url': "https://www.novaragnarok.com/?module=vending&action=itemhistory&id=" + ID,
-                            'refine': int(line.split(';')[1].strip()),
-                            'property': [item.strip() for item in line.split(';')[2].split(',')],
-                            'alert': int(line.split(';')[3].replace(' ', '').replace('.', '').replace(',', '').strip())
+                            'refine': int(line[1].strip()),
+                            'property': [item.strip() for item in line[2].split(',')],
+                            'alert': int(line[3].replace(' ', '').replace('.', '').replace(',', '').strip())
                         })
 
-    async def read_settings(self):
+    def read_settings(self):
         """ dict: SM, LM, median_filter, timer_interval, sell_filter, token and browser"""
 
         settings = {'SM': 15, 'LM': 60, 'median_filter': 0, 'timer_refresh': 180,
                     'sell_filter': 0, 'token': 0, 'browser': None}
 
-        async with aiofiles.open('Files/Settings.txt', 'r') as f:
-            async for line in f:
+        with open('Files/Settings.txt', 'r') as f:
+            for line in f:
                 if line.strip():
                     if 'median_filter' in line:
                         settings['median_filter'] = int(line.split('=')[1].replace('.', '').strip())
@@ -184,20 +194,21 @@ class NovaNotifier():
                         settings['LM'] = int(value)
                     elif 'browser' in line:
                         settings['browser'] = line.split('=')[1].strip()
+
         self.settings = settings
 
-    async def read_discord(self):
-        async with aiofiles.open('Files/Discord.txt', 'r') as f:
-            async for line in f:
+    def read_discord(self):
+        with open('Files/Discord.txt', 'r') as f:
+            for line in f:
                 if 'Discord_Username' in line:
                     self.discord_user = (line.replace(' ', '').strip().split('=')[1])
 
-    async def read_medians(self):
+    def read_medians(self):
         """Read and Set Items medians"""
 
         medians_cache = {}
-        async with aiofiles.open('Files/Medians_cache.txt', 'r') as f:
-            async for line in f:
+        with open('Files/Medians_cache.txt', 'r') as f:
+            for line in f:
                 if line.strip():
                     key, value = line.split(':')[0], line.split(':')[1].strip().split(' ')
                     medians_cache[key] = list(value)
@@ -213,9 +224,9 @@ class NovaNotifier():
 
         today = datetime.utcnow() - timedelta(hours=7)
         if not self.date(date, self.settings['median_cache'], today):
-            async with aiofiles.open('Files/Medians_refresh.txt', 'w+') as f:
-                await f.write(str(today.day) + '-' + str(today.month) + '-' + str(today.year))
-            async with aiofiles.open('Files/Medians_cache.txt', 'w+'):
+            with open('Files/Medians_refresh.txt', 'w+') as f:
+                f.write(str(today.day) + '-' + str(today.month) + '-' + str(today.year))
+            with open('Files/Medians_cache.txt', 'w+'):
                 pass
 
         # Delete item if medians are below median_filter
@@ -238,12 +249,12 @@ class NovaNotifier():
     async def network_request(self, url, session):
         while True:
             try:
-                async with self.sema, session.get(url, timeout=3) as response:
+                async with self.sema, session.get(url, timeout=4) as response:
                     if response.status == 200:
                         return str(await response.content.read())
                     await sleep(1)
             except TimeoutError:
-                await sleep(0.5)
+                await sleep(1)
 
     async def network_market_request(self, item, session):
         while True:
@@ -254,12 +265,12 @@ class NovaNotifier():
                         print(f"\x1b[2KSearched: {Fore.LIGHTGREEN_EX}{str(self.network_count['each'])}" +
                               f"/{str(self.network_count['total'])}", end='\r')
                         self.network_count['each'] += 1
-                        break
+                        return
                     await sleep(1)
             except TimeoutError:
                 print(f"\x1b[2KSearched: {Fore.LIGHTRED_EX}{str(self.network_count['each'])}" +
                       f"/{str(self.network_count['total'])}", end='\r')
-                await sleep(0.5)
+                await sleep(1)
 
     async def network_history_request(self, item, session):
         if 'long_med' not in item.keys():
@@ -271,12 +282,12 @@ class NovaNotifier():
                             print(f"\x1b[2KSearched: {Fore.LIGHTGREEN_EX}{str(self.network_count['each'])}" +
                                   f"/{str(self.network_count['total'])}", end='\r')
                             self.network_count['each'] += 1
-                            break
+                            return
                         await sleep(1)
                 except TimeoutError:
                     print(f"\x1b[2KSearched: {Fore.LIGHTRED_EX}{str(self.network_count['each'])}" +
                           f"/{str(self.network_count['total'])}", end='\r')
-                    await sleep(0.5)
+                    await sleep(1)
 
     async def network_items(self, items, cookie):
         self.network_count = {'each': 1, 'total': len(items)}
@@ -288,42 +299,38 @@ class NovaNotifier():
         async with ClientSession(cookies=cookie) as session:
             await gather(*[self.network_market_request(item, session) for item in items])
 
-        await self.set_names(items)  # Remove Unknown Items before History Search
+        self.delete_unknown(items)
 
         async with ClientSession(cookies=cookie) as session:
             await gather(*[self.network_history_request(item, session) for item in items])
 
-    async def set_names(self, items):
-        async with aiofiles.open('Files/Blacklist.txt', 'a+') as f:
-            async with aiofiles.open('Files/Medians_cache.txt', 'a+') as g:
-                i = 0
-                while i < len(items):
-                    if items[i]['market_data']:
-                        items[i]['name'] = items[i]['market_data'].split('"item-name">')[1].split('<')[0]
-                        if items[i]['name'] != 'Unknown':
-                            i += 1
-                        elif items:
-                            if items[i]['id'] + '\n' not in self.blacklist:
-                                await f.write(items[i]['id'] + '\n')
-                                self.blacklist.add(items[i]['id'])
-                            key = f"{items[i]['id']} {items[i]['refine']}"
-                            if key not in self.medians_cache.keys():
-                                self.medians_cache[key] = "0 0"
-                                await g.write(f"{key}: 0 0 \n")
+    def delete_unknown(self, items):
+        with open('Files/Blacklist.txt', 'a+') as f:
+            i = 0
+            while i < len(items):
+                if items[i]['market_data']:
+                    items[i]['name'] = items[i]['market_data'].split('"item-name">', 1)[1].split('<', 1)[0]
+                    if items[i]['name'] != 'Unknown':
+                        i += 1
+                    elif items:
+                        if items[i]['id'] + '\n' not in self.blacklist:
+                            f.write(items[i]['id'] + '\n')
+                            self.blacklist.add(items[i]['id'])
+                        else:
                             del items[i]
                             self.network_count['total'] -= 1
 
-    async def medians_history(self, items):
-        async with aiofiles.open('Files/Medians_cache.txt', 'a+') as f:
+    def medians_history(self, items):
+        with open('Files/Medians_cache.txt', 'a+') as f:
             for item in items:
                 if 'long_med' not in item.keys():
-                    item['short_med'], item['long_med'] = await self.medians(item['history_data'], item['refine'])
+                    item['short_med'], item['long_med'] = self.medians(item['history_data'], item['refine'])
                     key = f"{item['id']} {item['refine']}"
                     if key not in self.medians_cache.keys():
                         self.medians_cache[key] = f"{item['short_med']} {item['long_med']}"
-                        await f.write(f"{key}: {item['short_med']} {item['long_med']} \n")
+                        f.write(f"{key}: {item['short_med']} {item['long_med']} \n")
 
-    async def medians(self, history, refine):
+    def medians(self, history, refine):
         med, long_med = [], []
         today = datetime.utcnow() - timedelta(hours=7)
         property_exist = '<th>Additional Properties</th>' in history
@@ -334,9 +341,9 @@ class NovaNotifier():
         # Refine column present
         if '>Refine</th>' in history:
             while i < size:
-                item_refine = int(find_price[i + 1].split('data-order="')[1].split('"')[0])
+                item_refine = int(find_price[i + 1].split('data-order="', 1)[1].split('"', 1)[0])
                 if item_refine == refine:
-                    if property_exist or 'None' in find_price[i + 1].split('sorting_1')[0]:
+                    if property_exist and 'None' in find_price[i + 1].split('sorting_1', 1)[0]:
                         date = find_price[i].rsplit(' - ', 1)[0].rsplit(">", 1)[1].split('/')
                         date_format = f"{date[1]}-{date[0]}-20{date[2]}"
                         if self.date(date_format, self.settings['LM'], today):
@@ -350,7 +357,7 @@ class NovaNotifier():
         # Refine column missing
         else:
             while i < size:
-                if not property_exist or 'None' in find_price[i + 1].split('</tr>')[0]:
+                if not property_exist or 'None' in find_price[i + 1].split('</tr>', 1)[0]:
                     date = find_price[i].rsplit(' - ', 1)[0].rsplit(">", 1)[1].split('/')
                     date_format = f"{date[1]}-{date[0]}-20{date[2]}"
                     if self.date(date_format, self.settings['LM'], today):
@@ -370,14 +377,19 @@ class NovaNotifier():
         elif not med and not long_med:
             return 0, 0
 
-    async def sold_notification(self, cookie):
+    async def sold_notification(self, cookie, username):
         start = datetime.utcnow().replace(second=0, microsecond=0, tzinfo=timezone.utc) - timedelta(hours=7)
         url = 'https://www.novaragnarok.com/?module=account&action=sellinghistory'
 
         k = 0
         item = {}
         while True:
-            html = await self.network_session(url, cookie)
+            try:
+                html = await self.network_session(url, cookie)
+            except:
+                for i, info in enumerate(self.usernames):
+                    if username in info:
+                        self.usernames[i] = Fore.LIGHTRED_EX + self.usernames[i]
             i = j = back = found = 0
             while True:
                 try:
@@ -423,9 +435,9 @@ class NovaNotifier():
                     msg.append(item)
                     self.notify[item['id']] = item['refine']
 
-                # item['format_id'] = Fore.LIGHTGREEN_EX + item['id'] + Fore.LIGHTWHITE_EX  # ID green if notified
-                item['format_name'] = Fore.LIGHTGREEN_EX + item['name']
-                item['format_location'] = Fore.LIGHTGREEN_EX + item['location'] + Fore.LIGHTWHITE_EX  # Location green if notified
+                item['format_id'] = Fore.LIGHTGREEN_EX + item['id']
+                item['format_name'] = Fore.LIGHTGREEN_EX + item['name'] + Fore.LIGHTWHITE_EX
+                item['format_location'] = Fore.LIGHTGREEN_EX + item['location'] + Fore.LIGHTWHITE_EX
         if msg:
             create_task(self.notification(msg))
 
@@ -433,10 +445,9 @@ class NovaNotifier():
         embed = self.discord_bot.discord.Embed(title='Good News!', description='', color=16580705)
         for item in items:
             if 'id' in item.keys():
-                price = format(item['price'], ',d') + 'z'  # format_price has color
                 url = 'https://www.novaragnarok.com/?module=vending&action=item&id=' + item['id']
                 msg = (f"Item: {item['format_refine']} {item['name']}\nProperty: {item['format_property']}\n" +
-                       f"Location: {item['location']}\nPrice: {price}\n{url}")
+                       f"Location: {item['location']}\nPrice: {item['format_price']}\n{url}")
                 embed.add_field(name='Item Alert:', value=msg)
             else:
                 msg = f"Item: {item['ea']}x {item['name']}\nProp: {item['prop']}\nPrice: {item['price']}"
@@ -450,7 +461,7 @@ class NovaNotifier():
             for item in items:
                 if 'id' in item.keys():  # Market Alert
                     msg = (f"{item['format_refine']} {item['name']}\nProp: {item['format_property']}\n\n" +
-                           f"{price} | {item['location']}")  # Price notification
+                           f"{item['format_price']} | {item['location']}")  # Price notification
                 else:  # Sold Alert
                     msg = f"{item['ea']}x {item['name']}\nProp: {item['prop']}\n\nSold: {item['price']}"  # Sold notification
 
@@ -492,10 +503,10 @@ class NovaNotifier():
                 item['format_price'] = format(item['price'], ',d') + 'z'
                 item['ea'] = ea
                 item['cheap'] = cheap
-                item['format_short_med'] = format(item['short_med'], ',d') + 'z' if item['short_med'] else '-'
-                item['format_long_med'] = format(item['long_med'], ',d') + 'z' if item['long_med'] else '-'
+                item['format_short_med'] = Fore.LIGHTYELLOW_EX + format(item['short_med'], ',d') + 'z' if item['short_med'] else '-'
+                item['format_long_med'] = Fore.LIGHTYELLOW_EX + format(item['long_med'], ',d') + 'z' if item['long_med'] else '-'
                 item['short_med_perc'], item['long_med_perc'] = self.percentage(item)
-                item['format_alert'] = format(item['alert'], ',d') + 'z' if item['alert'] != 0 else '-'
+                item['format_alert'] = Fore.BLUE + format(item['alert'], ',d') + 'z' if item['alert'] != 0 else '-'
                 item['format_location'] = item['location'] = self.place(item, pos)
 
                 for key in item.keys():
@@ -533,7 +544,7 @@ class NovaNotifier():
         i = total = 0
         if refine_exist == 'center':  # Refinable
             while i < len(find_price_refine) - 1:
-                refine = int(find_price_refine[i + 1].split('data-order="')[1].split('"')[0])
+                refine = int(find_price_refine[i + 1].split('data-order="', 1)[1].split('"', 1)[0])
                 if refine >= item['refine']:
                     if self.property_check(prop_column, item['property'], find_price_refine[i + 1]):
                         self.lowest_price(find_price_refine[i], find_price_refine[i + 1], item['short_med'], i, info)
@@ -561,7 +572,7 @@ class NovaNotifier():
     def lowest_price(self, find_price_refine, find_price_refine_next, med, i, info):
         price = int(find_price_refine.rsplit('>', 1)[-1].replace(',', ''))
         try:
-            ea = int(find_price_refine_next.split('<td style')[0].split(' ea.')[0].rsplit(' ')[-1])
+            ea = int(find_price_refine_next.split('<td style', 1)[0].split(' ea.')[0].rsplit(' ')[-1])
         except:
             ea = 1
         if price <= med:  # Cheap
